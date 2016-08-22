@@ -1,0 +1,561 @@
+---
+title: "Final project"
+author: "Roshan"
+date: "March 11, 2016"
+output: html_document
+---
+
+```{r, echo=FALSE}
+
+library(plyr)
+library(ggplot2)
+library(DMwR) # To use manyNAs function
+library(VGAM)
+library(knitr)
+library(stats)
+```
+
+```{r, echo=FALSE}
+nlsy <- read.csv("nlsy97_income.csv", header=TRUE) # Importing the data
+```
+
+DATA SUMMARY & METHODOLOGY
+--------------------------
+
+DATA OVERVIEW:
+
+The nlsy data-set consists of nation-wide survey results of 8984 individuals who answered variious surevey questions that were categorized under 67 variables. The survey collects information about the individual personal, social, educational and occupational details. The survey respondents where aollowed to skip the questions for various reasons and if done so, the individual would have values marked from -1 to -5 in the respective columns.
+
+INITIAL DATA CLEANING:
+
+As the first step, mapping all negative values to NAs because the ultimate question "Is there a significant difference in income between men and women? Does the difference vary depending on other factors?" has got nothing to do with the negative values.
+
+COLUMN CLEANING
+
+Also deleting the columns that have more than 5000 number of missing values which is about 55% of the entire data in a column. With just 45% of valid data these columns might not have a significant effect on the Income variable. 
+   
+ROW CLEANING
+
+The data points that have 10% of values as missing decreases the quality of the data-set and the survey respondents do not really fit in to the sample that collects the necessary data to study the difference between income based on gender and for that reason removing them.
+
+```{r}
+# Moving NAs to the negative values
+nlsy[nlsy < 0] <- NA
+
+# Removing columns that have more than 6000 NAs
+column.count <- data.frame(names(nlsy), colSums(is.na(nlsy)))
+moreNA.columns <- subset(column.count, column.count$colSums.is.na.nlsy.. >= 5000)
+moreNA.columns
+delete.columns <- moreNA.columns$names.nlsy.
+nlsy <- nlsy[ , !(names(nlsy) %in% delete.columns)]
+# Also deleting PUBID and SAMPLE_TYPE columns as one is just an identification number and the other does not pertain to the question. Also deleting INCOME FROM JOB IN PAST YEAR? as this variable is already covered using the TOTAL INCOME FROM WAGES AND SALARY IN PAST YEAR
+
+nlsy$R0000100 <- NULL
+nlsy$R1235800 <- NULL
+nlsy$T7545400 <- NULL
+
+nlsy.old.column.names <- names(nlsy)
+
+# Removing rows that have more than 10% of values as NAs
+nlsy <- nlsy[-manyNAs(nlsy, 0.1), ]
+dim(nlsy)
+```
+
+Changing the column names
+```{r}
+colnames(nlsy) <- c("TOTNUM.INC", "GOOD.TEACHERS", "SAFE.AT.SCHOOL", "DPW.FAMILY.RELIGIOUS", "GENDER", "BDATE.M", "BDATE.Y", "PHY.EMO.LIMITS", "ENROLL.STAT", "HH.NET.WORTH.PRNT", "RACE", "DRUG.USE", "ORGA.RATE", "TRUST.RATE", "WEIGHT_04", "WEIGHT.RATE_04", "FAMILY.INCOME", "HH.SIZE", "HH.MEMB.UND18", "HH.MEMB.UND6", "DEG.RCVD", "MARITAL.STATUS", "RANGE.INCM.LAST.YR", "HEIGHT_FT", "HEIGHT_INCH", "WEIGHT_11", "SMOKED.DLI", "DRANK.DLI", "DRUGS.DLI", "WEIGHT.RATE_11", "DO.ABT.WEIGHT", "BUS.IND.TYPE", "DEBT.20", "EMPL.JOBS.HELD.TEEN", "EMPL.JOBS.HELD.ADULT", "JOBS.HELD.ADULT", "DEBT.30")
+
+nlsy.new.column.names <- colnames(nlsy)
+cbind(nlsy.old.column.names, nlsy.new.column.names)
+```
+
+Recoding the factors levels
+
+```{r, message = FALSE}
+
+nlsy <- transform(nlsy, 
+                  GENDER = as.factor(mapvalues(GENDER, c(1, 2), c("male", "female"))),
+                  RACE = as.factor(mapvalues(RACE, 1:4, c("Black", "Hispanic", "Mixed", "Other"))),
+                  GOOD.TEACHERS = as.factor(mapvalues(GOOD.TEACHERS, 1:4, c("Strongly Agree", "Agree", "Disagree", "Strongly Disagree"))),
+                  SAFE.AT.SCHOOL = as.factor(mapvalues(SAFE.AT.SCHOOL, 1:4, c("Strongly Agree", "Agree", "Disagree", "Strongly Disagree"))),
+                  BDATE.M = as.factor(mapvalues(BDATE.M, 1:12, c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"))),
+                  BDATE.Y = as.factor(BDATE.Y),
+                  PHY.EMO.LIMITS = as.factor(mapvalues(PHY.EMO.LIMITS, c(0, 1), c("No", "YES"))),
+                  ENROLL.STAT = as.factor(mapvalues(ENROLL.STAT, 1:11, c("Not enrolled, no high school degree, no GED", "Not enrolled, GED", "Not enrolled, high school degree", "Not enrolled, some college", "Not enrolled, 2-year college graduate", "Not enrolled, 4-year college graduate", "Not enrolled, graduate degree", "Enrolled in grades 1-12, not a high school graduate", "Enrolled in a 2-year college", "Enrolled in a 4-year college", "Enrolled in a graduate program"))),
+                  DRUG.USE = as.factor(mapvalues(DRUG.USE, c(1, 0), c("Yes", "No"))),
+                  WEIGHT.RATE_04 = as.factor(mapvalues(WEIGHT.RATE_04, 1:5, c("VERY UNDERWEIGHT", "SLIGHTLY UNDERWEIGHT", "ABOUT THE RIGHT WEIGHT", "SLIGHTLY OVERWEIGHT", "VERY OVERWEIGHT"))),
+                  DEG.RCVD = as.factor(mapvalues(DEG.RCVD, 0:7, c("None", "GED", "High school diploma", "Associate/Junior college", "Bachelor's degree", "Master's degree", "PhD", "Professional degree"))),
+                  MARITAL.STATUS = as.factor(mapvalues(MARITAL.STATUS, 0:4, c("Never-married", "Married", "Separated", "Divorced", "Widowed"))),
+                  SMOKED.DLI = as.factor(mapvalues(SMOKED.DLI, c(1, 0), c("Yes", "No"))),
+                  DRANK.DLI = as.factor(mapvalues(DRANK.DLI, c(1, 0), c("Yes", "No"))),
+                  DRUGS.DLI = as.factor(mapvalues(DRUGS.DLI, c(1, 0), c("Yes", "No"))),
+                  WEIGHT.RATE_11 = as.factor(mapvalues(WEIGHT.RATE_11, 1:5, c("VERY UNDERWEIGHT", "SLIGHTLY UNDERWEIGHT", "ABOUT THE RIGHT WEIGHT", "SLIGHTLY OVERWEIGHT", "VERY OVERWEIGHT"))),
+                  DO.ABT.WEIGHT = as.factor(mapvalues(DO.ABT.WEIGHT, 1:4, c("LOSE WEIGHT", "GAIN WEIGHT", "STAY THE SAME WEIGHT", "NOTHING")))
+                  )
+
+# Recode industry codes
+
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE >= 170 & nlsy$BUS.IND.TYPE <= 290] <- "AGRICULTURE, FORESTRY AND FISHERIES"
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE >= 370 & nlsy$BUS.IND.TYPE <= 490] <- "MINING"
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE >= 570 & nlsy$BUS.IND.TYPE <= 690] <- "UTILITIES"
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE == 770] <- "CONSTRUCTION"
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE >= 1070 & nlsy$BUS.IND.TYPE <= 3990] <- "MANUFACTURING"
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE >= 4070 & nlsy$BUS.IND.TYPE <= 4590] <- "WHOLESALE TRADE"
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE >= 4670 & nlsy$BUS.IND.TYPE <= 5790] <- "RETAIL TRADE"
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE == 5890] <- "ARTS, ENTERTAINMENT AND RECREATION SERVICES"
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE >= 6070 & nlsy$BUS.IND.TYPE <= 6390] <- "TRANSPORTATION AND WAREHOUSING"
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE >= 6470 & nlsy$BUS.IND.TYPE <= 6780] <- "INFORMATION AND COMMUNICATION"
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE >= 6870 & nlsy$BUS.IND.TYPE <= 7190] <- "FINANCE, INSURANCE, AND REAL ESTATE"
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE >= 7270 & nlsy$BUS.IND.TYPE <= 7790] <- "PROFESSIONAL AND RELATED SERVICES"
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE >= 7860 & nlsy$BUS.IND.TYPE <= 8470] <- "EDUCATIONAL, HEALTH, AND SOCIAL SERVICES"
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE >= 8560 & nlsy$BUS.IND.TYPE <= 8690] <- "ENTERTAINMENT, ACCOMODATIONS, AND FOOD SERVICES"
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE >= 8770 & nlsy$BUS.IND.TYPE <= 9290] <- "OTHER SERVICES"
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE >= 9370 & nlsy$BUS.IND.TYPE <= 9590] <- "PUBLIC ADMINISTRATION"
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE >= 9670 & nlsy$BUS.IND.TYPE <= 9890] <- "ACTIVE DUTY MILITARY"
+nlsy$BUS.IND.TYPE[nlsy$BUS.IND.TYPE >= 9950 & nlsy$BUS.IND.TYPE <= 9990] <- "ACS SPECIAL CODES"
+nlsy$BUS.IND.TYPE <- as.factor(nlsy$BUS.IND.TYPE)
+
+str(nlsy)
+```
+
+Checking summary statistics, correlation among numeric variables and some more cleaning
+
+```{r}
+kable(summary(nlsy))
+
+# Selecting only the numeric columns for correlation
+nlsy.num <- nlsy[c(1, 4, 10, 13:15, 17:20, 23:26, 33:37)]
+kable(cor(nlsy.num, use="pairwise.complete.obs"))
+
+# Since JOBS.HELD.ADULT	& EMPL.JOBS.HELD.ADULT are highly correlated, moving NULL to EMPL.JOBS.HELD.ADULT.
+nlsy$EMPL.JOBS.HELD.ADULT <- NULL
+
+```
+
+Check for normalisation by plotting histogram for each of the variables
+
+```{r, message=FALSE}
+# Checking normality for numeric variable
+
+mean(nlsy$TOTNUM.INC, na.rm = TRUE)
+sd(nlsy$TOTNUM.INC, na.rm = TRUE)
+# Skewed to the right as most of the row values are 0.
+qplot(na.omit(nlsy$TOTNUM.INC), xlab = "TOTAL NUMBER OF INCARCERATIONS", geom="histogram") 
+
+
+mean(nlsy$DPW.FAMILY.RELIGIOUS, na.rm = TRUE)
+sd(nlsy$DPW.FAMILY.RELIGIOUS, na.rm = TRUE)
+# Skewed to the right as most of the row values are 0 and 1.
+qplot(na.omit(nlsy$DPW.FAMILY.RELIGIOUS), xlab = "# DAYS PER WEEK TYPICALLY FAMILY DOES SOMETHING RELIGIOUS", geom="histogram") 
+
+
+mean(nlsy$HH.NET.WORTH.PRNT, na.rm = TRUE)
+sd(nlsy$HH.NET.WORTH.PRNT, na.rm = TRUE)
+# Right skewed 
+qplot(na.omit(nlsy$HH.NET.WORTH.PRNT), xlab = "NET WORTH OF HOUSEHOLD ACCORDING TO PARENT", geom="histogram") 
+
+
+mean(nlsy$ORGA.RATE, na.rm = TRUE)
+sd(nlsy$ORGA.RATE, na.rm = TRUE)
+# Normally distributed.
+qplot(na.omit(nlsy$ORGA.RATE), xlab = "DISORGANIZED OR ORGANIZED", geom="histogram") 
+
+
+mean(nlsy$TRUST.RATE, na.rm = TRUE)
+sd(nlsy$TRUST.RATE, na.rm = TRUE)
+# Skewed to left as most of them answered that they were trustful
+qplot(na.omit(nlsy$TRUST.RATE), xlab = "TRUSTFUL OR DISTRUSTFUL", geom="histogram") 
+
+
+mean(nlsy$WEIGHT_04, na.rm = TRUE)
+sd(nlsy$WEIGHT_04, na.rm = TRUE)
+# normally distributed.
+qplot(na.omit(nlsy$WEIGHT_04), xlab = "DESCRIBE WEIGHT", geom="histogram") 
+
+
+mean(nlsy$FAMILY.INCOME, na.rm = TRUE)
+sd(nlsy$FAMILY.INCOME, na.rm = TRUE)
+# Skewed to right
+qplot(na.omit(nlsy$FAMILY.INCOME), xlab = "GROSS FAMILY INCOME", geom="histogram") 
+
+
+mean(nlsy$HH.SIZE, na.rm = TRUE)
+sd(nlsy$HH.SIZE, na.rm = TRUE)
+# moderately normally distributed.
+qplot(na.omit(nlsy$HH.SIZE), xlab = "HOUSEHOLD SIZE", geom="histogram") 
+
+
+mean(nlsy$HH.MEMB.UND18, na.rm = TRUE)
+sd(nlsy$HH.MEMB.UND18, na.rm = TRUE)
+# Skewed to right as there were mostly 0 household members under age 18 in a family
+qplot(na.omit(nlsy$HH.MEMB.UND18), xlab = "NUMBER OF HOUSEHOLD MEMBERS UNDER AGE 18", geom="histogram") 
+
+
+mean(nlsy$HH.MEMB.UND6, na.rm = TRUE)
+sd(nlsy$HH.MEMB.UND6, na.rm = TRUE)
+# Skewed to right as there were mostly 0 household members under age 6 in a family
+qplot(na.omit(nlsy$HH.MEMB.UND6), xlab = "NUMBER OF HOUSEHOLD MEMBERS UNDER AGE 6", geom="histogram") 
+
+
+mean(nlsy$RANGE.INCM.LAST.YR, na.rm = TRUE)
+sd(nlsy$RANGE.INCM.LAST.YR, na.rm = TRUE)
+# Normally distributed
+qplot(na.omit(nlsy$RANGE.INCM.LAST.YR), xlab = "TOTAL INCOME FROM WAGES AND SALARY IN PAST YEAR", geom="histogram") 
+
+
+mean(nlsy$HEIGHT_FT, na.rm = TRUE)
+sd(nlsy$HEIGHT_FT, na.rm = TRUE)
+# moderately normally distributed
+qplot(na.omit(nlsy$HEIGHT_FT), xlab = "HEIGHT - FEET", geom="histogram") 
+
+
+mean(nlsy$HEIGHT_INCH, na.rm = TRUE)
+sd(nlsy$HEIGHT_INCH, na.rm = TRUE)
+# Not normally distributed
+qplot(na.omit(nlsy$HEIGHT_INCH), xlab = "HEIGHT - INCHES", geom="histogram") 
+
+
+mean(nlsy$WEIGHT_11, na.rm = TRUE)
+sd(nlsy$WEIGHT_11, na.rm = TRUE)
+# normally distributed
+qplot(na.omit(nlsy$WEIGHT_11), xlab = "WEIGHT - POUNDS", geom="histogram") 
+
+
+mean(nlsy$DEBT.20, na.rm = TRUE)
+sd(nlsy$DEBT.20, na.rm = TRUE)
+# Skewed to right as most of them had 0 debt.
+qplot(na.omit(nlsy$DEBT.20), xlab = "DEBT AT AGE 20", geom="histogram") 
+
+
+mean(nlsy$EMPL.JOBS.HELD.TEEN, na.rm = TRUE)
+sd(nlsy$EMPL.JOBS.HELD.TEEN, na.rm = TRUE)
+# normally distributed
+qplot(na.omit(nlsy$EMPL.JOBS.HELD.TEEN), xlab = "# EMPLOYEE-TYPE JOBS FROM AGE 14 THROUGH AGE 19", geom="histogram") 
+
+
+mean(nlsy$JOBS.HELD.ADULT, na.rm = TRUE)
+sd(nlsy$JOBS.HELD.ADULT, na.rm = TRUE)
+# normally distributed
+qplot(na.omit(nlsy$JOBS.HELD.ADULT), xlab = "# JOBS HELD FROM AGE 20", geom="histogram") 
+
+
+mean(nlsy$DEBT.30, na.rm = TRUE)
+sd(nlsy$DEBT.30, na.rm = TRUE)
+# Skewed to right as most of them had 0 debt.
+qplot(na.omit(nlsy$DEBT.30), xlab = "DEBT AT AGE 30", geom="histogram") 
+```
+
+QQNORM and QQLINE plots to understand the overall distribution of a factor variable. Also running ANOVA test to see the significane of factor variables.
+
+```{r}
+qplot(na.omit(nlsy$GOOD.TEACHERS), xlab = "Good teachers") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$GOOD.TEACHERS=="Agree"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$GOOD.TEACHERS=="Agree"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ GOOD.TEACHERS, data = nlsy)) # GOOD.TEACHERS is statistically a significant in predicting Income.
+
+
+qplot(na.omit(nlsy$SAFE.AT.SCHOOL), xlab = "Safe at school") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$SAFE.AT.SCHOOL=="Disagree"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$SAFE.AT.SCHOOL=="Disagree"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ SAFE.AT.SCHOOL, data = nlsy)) # SAFE.AT.SCHOOL is statistically a significant in predicting Income.
+
+qplot(na.omit(nlsy$BDATE.M), xlab = "Birth month") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$BDATE.M=="Oct"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$BDATE.M=="Oct"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ BDATE.M, data = nlsy)) # BDATE.M is statistically a significant in predicting Income.
+
+qplot(na.omit(nlsy$BDATE.Y), xlab = "Birth year") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$BDATE.Y=="1983"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$BDATE.Y=="1983"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ BDATE.Y, data = nlsy)) # BDATE.Y is statistically a significant in predicting Income.
+
+qplot(na.omit(nlsy$PHY.EMO.LIMITS), xlab = "Physical, emotional condition limits school/work") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$PHY.EMO.LIMITS=="YES"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$PHY.EMO.LIMITS=="YES"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ PHY.EMO.LIMITS, data = nlsy)) # PHY.EMO.LIMITS is statistically a significant in predicting Income.
+
+qplot(na.omit(nlsy$ENROLL.STAT), xlab = "Current enrollment status") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$ENROLL.STAT=="Enrolled in grades 1-12, not a high school graduate"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$ENROLL.STAT=="Enrolled in grades 1-12, not a high school graduate"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ ENROLL.STAT, data = nlsy)) # ENROLL.STAT is statistically a significant in predicting Income.
+
+qplot(na.omit(nlsy$GENDER), xlab = "Gender") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$GENDER=="male"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$GENDER=="male"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ GENDER, data = nlsy)) # GENDER is statistically a significant in predicting Income.
+
+qplot(na.omit(nlsy$RACE), xlab = "Race") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$RACE=="Mixed"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$RACE=="Mixed"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ RACE, data = nlsy)) # RACE is statistically a significant in predicting Income.
+
+qplot(na.omit(nlsy$DRUG.USE), xlab = "Ever use cocaine/hard drugs?") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$DRUG.USE=="Yes"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$DRUG.USE=="Yes"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ DRUG.USE, data = nlsy)) # DRUG.USE is statistically a significant in predicting Income.
+
+qplot(na.omit(nlsy$WEIGHT.RATE_04), xlab = "Weight description for 2004") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$WEIGHT.RATE_04=="ABOUT THE RIGHT WEIGHT"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$WEIGHT.RATE_04=="ABOUT THE RIGHT WEIGHT"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ WEIGHT.RATE_04, data = nlsy)) # WEIGHT.RATE_04 is statistically a significant in predicting Income.
+
+qplot(na.omit(nlsy$DEG.RCVD), xlab = "Highest degree received prior to the 11/12 acad year") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$DEG.RCVD=="PhD"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$DEG.RCVD=="PhD"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ DEG.RCVD, data = nlsy)) # DEG.RCVD is statistically a significant in predicting Income.
+
+qplot(na.omit(nlsy$MARITAL.STATUS), xlab = "Marital status") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$MARITAL.STATUS=="Married"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$MARITAL.STATUS=="Married"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ MARITAL.STATUS, data = nlsy)) # MARITAL.STATUS is statistically a significant in predicting Income.
+ 
+qplot(na.omit(nlsy$SMOKED.DLI), xlab = "Smoked since last interview?") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$SMOKED.DLI=="Yes"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$SMOKED.DLI=="Yes"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ SMOKED.DLI, data = nlsy)) # SMOKED.DLI is statistically a significant in predicting Income.
+
+qplot(na.omit(nlsy$DRANK.DLI), xlab = "Drank since last interview?") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$DRANK.DLI=="Yes"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$DRANK.DLI=="Yes"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ DRANK.DLI, data = nlsy)) # DRANK.DLI is statistically a significant in predicting Income.
+
+qplot(na.omit(nlsy$DRUGS.DLI), xlab = "Drugs since last interview") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$DRUGS.DLI=="Yes"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$DRUGS.DLI=="Yes"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ DRUGS.DLI, data = nlsy)) # DRUGS.DLI is statistically a significant in predicting Income.
+
+qplot(na.omit(nlsy$WEIGHT.RATE_11), xlab = "Weight description for 2011") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$WEIGHT.RATE_11=="VERY UNDERWEIGHT"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$WEIGHT.RATE_11=="VERY UNDERWEIGHT"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ WEIGHT.RATE_11, data = nlsy)) # WEIGHT.RATE_11 is statistically a significant in predicting Income.
+
+qplot(na.omit(nlsy$DO.ABT.WEIGHT), xlab = "What is the indiviual doing about his/her weight") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$DO.ABT.WEIGHT=="LOSE WEIGHT"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$DO.ABT.WEIGHT=="LOSE WEIGHT"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ DO.ABT.WEIGHT, data = nlsy)) # DO.ABT.WEIGHT is statistically a significant in predicting Income.
+
+qplot(na.omit(nlsy$BUS.IND.TYPE), xlab = "Type of bus or industry code") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+with(nlsy, qqnorm(RANGE.INCM.LAST.YR[nlsy$BUS.IND.TYPE=="AGRICULTURE, FORESTRY AND FISHERIES"]))
+with(nlsy, qqline(RANGE.INCM.LAST.YR[nlsy$BUS.IND.TYPE=="AGRICULTURE, FORESTRY AND FISHERIES"], col = "blue"))
+summary(aov(RANGE.INCM.LAST.YR ~ BUS.IND.TYPE, data = nlsy)) # BUS.IND.TYPE is statistically a significant in predicting Income.
+```
+
+Looking at the plots of qqnorm & qqline, all of the factor variables are skewed a bit because of the top-coded values. Removing the outliers in the form of topcoded can make the data more normally distributed. But since I use tobit regression, I would want to retain the topcoded values. So to increase the normality of the data, I scale the data. 
+
+Scaling the numeric variables that were not normally distrubuted.
+
+```{r}
+nlsy <- transform(nlsy, nlsy$TOTNUM.INC <- scale(nlsy$TOTNUM.INC),                                            nlsy$DPW.FAMILY.RELIGIOUS <- scale(nlsy$DPW.FAMILY.RELIGIOUS), 
+                  nlsy$HH.NET.WORTH.PRNT <- scale(nlsy$HH.NET.WORTH.PRNT), 
+                  nlsy$TRUST.RATE <- scale(nlsy$TRUST.RATE), 
+                  nlsy$FAMILY.INCOME <- scale(nlsy$FAMILY.INCOME), 
+                  nlsy$HH.SIZE <- scale(nlsy$HH.SIZE), 
+                  nlsy$HH.MEMB.UND18 <- scale(nlsy$HH.MEMB.UND18), 
+                  nlsy$HH.MEMB.UND6 <- scale(nlsy$HH.MEMB.UND6), 
+                  nlsy$HEIGHT_FT <- scale(nlsy$HEIGHT_FT), 
+                  nlsy$HEIGHT_INCH <- scale(nlsy$HEIGHT_INCH), 
+                  nlsy$DEBT.20 <- scale(nlsy$DEBT.20), 
+                  nlsy$DEBT.30 <- scale(nlsy$DEBT.30)
+                  )
+```
+
+FINDINGS
+--------
+
+Regression analysis
+
+```{r, message = FALSE}
+library(GGally)
+# Running tobit regression to include topcoded values with income as dependent variables and all the other variables other than the ones excluded above as the model's independent variables.
+
+summary(reg1 <- vglm(RANGE.INCM.LAST.YR ~ ., tobit(Upper = 146000), data = nlsy))
+
+# The highest p-val in the above model is for the BUS.IND.TYPE variable. As it is a factor variable, tried to execute anova test to understand the significance of BUS.IND.TYPE to the model but due to error couldn't proceed. So if majority of the dummy variables of a fator have a high p-value (above 0.05) in a model, then I exclude it in my step-wise elimination regression method. 
+
+# As a first step, excluding BUS.IND.TYPE from the model due to its statistical insignificance.
+
+summary(reg2 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE, tobit(Upper = 146000), data = nlsy))
+
+# Excluding SAFE.AT.SCHOOL from the model due to its statistical insignificance.
+
+summary(reg3 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL, tobit(Upper = 146000), data = nlsy))
+
+# Excluding DPW.FAMILY.RELIGIOUS from the model due to its statistical insignificance.
+
+summary(reg4 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS, tobit(Upper = 146000), data = nlsy))
+
+# Excluding WEIGHT.RATE_11 from the model due to its statistical insignificance.
+
+summary(reg5 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11, tobit(Upper = 146000), data = nlsy))
+
+# Excluding HEIGHT_FT from the model due to its statistical insignificance.
+
+summary(reg6 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT, tobit(Upper = 146000), data = nlsy))
+
+# Excluding MARITAL.STATUS from the model due to its statistical insignificance.
+
+summary(reg7 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS, tobit(Upper = 146000), data = nlsy))
+
+# Excluding BDATE.M from the model due to its statistical insignificance.
+
+summary(reg8 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M, tobit(Upper = 146000), data = nlsy))
+
+# Excluding WEIGHT.RATE_04 from the model due to its statistical insignificance.
+
+summary(reg9 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04, tobit(Upper = 146000), data = nlsy))
+
+# Excluding GOOD.TEACHERS from the model due to its statistical insignificance.
+
+summary(reg10 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS, tobit(Upper = 146000), data = nlsy))
+
+# Excluding RACE from the model due to its statistical insignificance.
+
+summary(reg11 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS - RACE, tobit(Upper = 146000), data = nlsy))
+
+# Excluding DRUG.USE from the model due to its statistical insignificance.
+
+summary(reg12 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS - RACE - DRUG.USE, tobit(Upper = 146000), data = nlsy))
+
+# Excluding ORGA.RATE from the model due to its statistical insignificance.
+
+summary(reg13 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS - RACE - DRUG.USE - ORGA.RATE, tobit(Upper = 146000), data = nlsy))
+
+# Excluding DRANK.DLI from the model due to its statistical insignificance.
+
+summary(reg14 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS - RACE - DRUG.USE - ORGA.RATE - DRANK.DLI, tobit(Upper = 146000), data = nlsy))
+
+# Excluding ENROLL.STAT from the model due to its statistical insignificance.
+
+summary(reg15 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS - RACE - DRUG.USE - ORGA.RATE - DRANK.DLI - ENROLL.STAT, tobit(Upper = 146000), data = nlsy))
+
+# Excluding WEIGHT_04 from the model due to its statistical insignificance.
+
+summary(reg16 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS - RACE - DRUG.USE - ORGA.RATE - DRANK.DLI - ENROLL.STAT - WEIGHT_04, tobit(Upper = 146000), data = nlsy))
+
+# Excluding WEIGHT_11 from the model due to its statistical insignificance.
+
+summary(reg17 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS - RACE - DRUG.USE - ORGA.RATE - DRANK.DLI - ENROLL.STAT - WEIGHT_04 - WEIGHT_11, tobit(Upper = 146000), data = nlsy))
+
+# Excluding DO.ABT.WEIGHT from the model due to its statistical insignificance.
+
+summary(reg18 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS - RACE - DRUG.USE - ORGA.RATE - DRANK.DLI - ENROLL.STAT - WEIGHT_04 - WEIGHT_11 - DO.ABT.WEIGHT, tobit(Upper = 146000), data = nlsy))
+
+# Excluding SMOKED.DLI from the model due to its statistical insignificance.
+
+summary(reg19 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS - RACE - DRUG.USE - ORGA.RATE - DRANK.DLI - ENROLL.STAT - WEIGHT_04 - WEIGHT_11 - DO.ABT.WEIGHT - SMOKED.DLI, tobit(Upper = 146000), data = nlsy))
+
+# Excluding TRUST.RATE from the model due to its statistical insignificance.
+
+summary(reg20 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS - RACE - DRUG.USE - ORGA.RATE - DRANK.DLI - ENROLL.STAT - WEIGHT_04 - WEIGHT_11 - DO.ABT.WEIGHT - SMOKED.DLI - TRUST.RATE, tobit(Upper = 146000), data = nlsy))
+
+# Excluding DEBT.30 from the model due to its statistical insignificance.
+
+summary(reg21 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS - RACE - DRUG.USE - ORGA.RATE - DRANK.DLI - ENROLL.STAT - WEIGHT_04 - WEIGHT_11 - DO.ABT.WEIGHT - SMOKED.DLI - TRUST.RATE - DEBT.30, tobit(Upper = 146000), data = nlsy))
+
+# Excluding DEBT.20 from the model due to its statistical insignificance.
+
+summary(reg22 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS - RACE - DRUG.USE - ORGA.RATE - DRANK.DLI - ENROLL.STAT - WEIGHT_04 - WEIGHT_11 - DO.ABT.WEIGHT - SMOKED.DLI - TRUST.RATE - DEBT.30 - DEBT.20, tobit(Upper = 146000), data = nlsy))
+
+# Excluding TOTNUM.INC from the model due to its statistical insignificance.
+
+summary(reg23 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS - RACE - DRUG.USE - ORGA.RATE - DRANK.DLI - ENROLL.STAT - WEIGHT_04 - WEIGHT_11 - DO.ABT.WEIGHT - SMOKED.DLI - TRUST.RATE - DEBT.30 - DEBT.20 - TOTNUM.INC, tobit(Upper = 146000), data = nlsy))
+
+# Excluding DRUGS.DLI from the model due to its statistical insignificance.
+
+summary(reg24 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS - RACE - DRUG.USE - ORGA.RATE - DRANK.DLI - ENROLL.STAT - WEIGHT_04 - WEIGHT_11 - DO.ABT.WEIGHT - SMOKED.DLI - TRUST.RATE - DEBT.30 - DEBT.20 - TOTNUM.INC - DRUGS.DLI, tobit(Upper = 146000), data = nlsy))
+
+# Excluding BDATE.Y from the model as nat all dummy variables show up in the model.
+
+summary(reg24 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS - RACE - DRUG.USE - ORGA.RATE - DRANK.DLI - ENROLL.STAT - WEIGHT_04 - WEIGHT_11 - DO.ABT.WEIGHT - SMOKED.DLI - TRUST.RATE - DEBT.30 - DEBT.20 - TOTNUM.INC - DRUGS.DLI - BDATE.Y, tobit(Upper = 146000), data = nlsy))
+
+# Excluding HEIGHT_INCH from the model due to its statistical insignificance.
+
+summary(reg25 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS - RACE - DRUG.USE - ORGA.RATE - DRANK.DLI - ENROLL.STAT - WEIGHT_04 - WEIGHT_11 - DO.ABT.WEIGHT - SMOKED.DLI - TRUST.RATE - DEBT.30 - DEBT.20 - TOTNUM.INC - DRUGS.DLI - BDATE.Y - HEIGHT_INCH, tobit(Upper = 146000), data = nlsy))
+
+# Excluding HH.MEMB.UND6 from the model due to its statistical insignificance.
+
+summary(reg26 <- vglm(RANGE.INCM.LAST.YR ~ . - BUS.IND.TYPE - SAFE.AT.SCHOOL - DPW.FAMILY.RELIGIOUS - WEIGHT.RATE_11 - HEIGHT_FT - MARITAL.STATUS - BDATE.M - WEIGHT.RATE_04 - GOOD.TEACHERS - RACE - DRUG.USE - ORGA.RATE - DRANK.DLI - ENROLL.STAT - WEIGHT_04 - WEIGHT_11 - DO.ABT.WEIGHT - SMOKED.DLI - TRUST.RATE - DEBT.30 - DEBT.20 - TOTNUM.INC - DRUGS.DLI - BDATE.Y - HEIGHT_INCH - HH.MEMB.UND6, tobit(Upper = 146000), data = nlsy))
+
+```
+
+Now that all the variables in the model are statistically significant in predicting income, a list of them is,
+
+1. Gender 
+2. Physical, emotional condition limits school/work
+3. Net worth of household according to parent
+4. Gross family income
+5. Household size
+6. Number of household members under age 18
+7. Highest degree received prior to the 11/12 acad year
+8. Number of Employee-type jobs from age 14 through age 19
+9. Number of Jobs held from age 20
+
+Following are the inferences made from the regression analysis,
+
+a. As the topcoded values were considered for analysis, I've used tobit regression and hence the intercept 2 here does is negligible and does not mean anything. Intercept 1 has a value of 33,540 which is the base value for income irrespective of any other variables in the model. This base income is high because of including the topcoded values where average income is $146,000.
+
+b. The gender variable is categorical and the baseline for it is female. For a data point that has male as gender, the income on average increases by $9,134, considering all the other variables as constatnt. Also, it can be seen that the variable has a very high standard error which implies that the beta value is not more specific.
+
+c. The factor variable 'PHY.EMO.LIMIT' also has a negative impact on income and is one of the variables with the highest effect size. This implies us that if a person is prone to physical, emotional condition limits at school/work, he/she would earn lesser than others by $7,777, with all the other variables held constant.
+
+d. Net worth of household according to parent has a negligible positive effect on income but due to its low standard error, the effect size is more specific. If this variable increases by one unit, it contributes a $0.023 increase in the income variable with rest of the variables held constant.
+
+e. Gross family income has a positive impact in this model over income. As this variable increases by 1 unit, the income on average increases by $0.166 with all the other variables as constant.
+
+f. Household size has a coefficient of -5141 which shows its high influence over income. As the number of people in a household increases by 1 unit, the income of a person decreases by $5,141. But since the standard error of this variable is high, its beta value is not specific.
+
+g. AS the number of household members under 18 increases by an unit, the income of a person in that house hold tends to increase by $5,748. This is supported by the claim that a person needs to earn more to fund the education of his/her children.
+
+h. Degree received is a factor variable which explains the variation in income based on a person's educational background. Out of the dummy variables, 'None' has the highest negative effect on income. This statistically proves that is a person is not educationally qualifiied, his/her income would increase by $9,983. Also, if a person has studied PhD, he/she earns $27,450 more than any other educationally qualified person, with all the other variables held constant.
+
+i. As the number of employee type jobs held as a teen increases by one unit, the income of the individual also increases by $922. On the other hand as the number of jobs held as an adult increases by one unit, the income of that individual decreases by $1,396, with all the other variables held constant. This implies that an individual's employee type job during his/her teenage life has more value in-terms of income than the individual's job after his/her 20s.
+
+Diagnostic plot analysis:
+
+Tried to generate diagnostic plots for tobit regression, but the command plot(reg26) was throwing the error, "Error in plotvglm(reg26) : this function has not been written yet!". So I was not able to analyse plots for tobit regression.
+
+Analysis through Interaction term
+
+```{r}
+# Gender and PHY.EMO.LIMITS interaction
+summary(reg27 <- vglm(RANGE.INCM.LAST.YR ~ GENDER * PHY.EMO.LIMITS + PHY.EMO.LIMITS + HH.NET.WORTH.PRNT + FAMILY.INCOME + HH.SIZE + HH.MEMB.UND18 + DEG.RCVD + EMPL.JOBS.HELD.TEEN + JOBS.HELD.ADULT, tobit(Upper = 146000), data = nlsy))
+
+# Gender and DEG.RCVD interaction
+summary(reg28 <- vglm(RANGE.INCM.LAST.YR ~ GENDER * DEG.RCVD + PHY.EMO.LIMITS + HH.NET.WORTH.PRNT + FAMILY.INCOME + HH.SIZE + HH.MEMB.UND18 + DEG.RCVD + EMPL.JOBS.HELD.TEEN + JOBS.HELD.ADULT, tobit(Upper = 146000), data = nlsy))
+
+confint(reg28, parm = "GENDERmale:DEG.RCVDPhD")
+
+```
+
+Below listed are some of the inferences from the above interactions,
+
+a. The interaction between gender and PHY.EMO.LIMIT variables resulted in a statistically insignificant variable.
+
+b. The interaction between gender and highest degree received reulted in a variable that provides insight between income difference of male and female who pursued a PhD. The nature of this variable is in such a way that, when a data point has gender as male and degree received as PhD, his income would be -$57,364 ($8,706 - $66,070) lesser than that of a female who also pursued a PhD. This implies that, the gender gap interms of income on average closes in and females start to earn higher than males when females pursue higher studies such as PhD. 
+    The confidence interval implies us that there is a 95% chance that, the true mean difference of income between males and females who studied PhD is in between 99771.33 and 32377.41.
+
+DISCUSSION
+----------
+
+So to answer the ultimate question of this project, there clearly exists a gender gap interms of income but as female counterparts pursue higher education than their male counterparts, the gender gap dissolves.
+
+```{r}
+# The below boxplot clearly shows that males earn higher than females. 
+qplot(x = GENDER, 
+      y = RANGE.INCM.LAST.YR, geom = "boxplot", data = nlsy, 
+      xlab = "Sex", ylab = "Income")
+
+phD.income <- subset(nlsy, DEG.RCVD == "PhD", select = c(5, 23))
+
+# The below shown is the boxplot of individuals who did a PhD and clearly it can be seen that the average earnings of females is higher than that of males.
+
+qplot(x = GENDER, 
+      y = RANGE.INCM.LAST.YR, geom = "boxplot", data = phD.income, 
+      xlab = "Sex", ylab = "Income")
+```
+
+Hence the assertion 'Is there a significant difference in income between men and women?', is positive and through my analysis it is also statistically supported. And this difference in income between the genders definitely depends on educational qualifications of the individual.
+
+One main limitation I faced is the lack of population percentage of men and women in differnct regions from where the survey respondent come from. Some areas or industries might have more males than females and because of higher strength, the mean income between the two might not be fair to compare. Apart from this factor, the models that I developed is believable and also supports the current gender bias.
+
+  From the level of analysis I've made in this project, I can very well say that I'm confident about my findings and I do believe in my inferences. For this reason, I'm confident enough to present my findings to the policy makers.

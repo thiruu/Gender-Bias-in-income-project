@@ -1,0 +1,44 @@
+
+
+Reference
+Number     Year  Variable Description                                                       Question Name              
+-------------------------------------------------------------------------------------------------------------------------
+E80431.00  XRND  N  TOTAL NUMBER OF INCARCERATIONS                                             INCARC_TOTNUM              
+R00694.00  1997  F  TEACHERS GOOD (AGREE/DISAGREE)                                             YSCH-36400                 
+R00700.00  1997  F  FEEL SAFE AT SCHOOL AGREE/DISAGREE                                         YSCH-37000                 
+R03239.00  1997  N  # DAYS PER WEEK TYPICALLY FAMILY DOES SOMETHING RELIGIOUS                  YSAQ-010                   
+R05363.00  1997  F  KEY!SEX, RS GENDER (SYMBOL)                                                KEY!SEX                    
+R05364.01  1997  F  KEY!BDATE, RS BIRTHDATE MONTH/YEAR (SYMBOL)                                KEY!BDATE_M                
+R05364.02  1997  F  KEY!BDATE, RS BIRTHDATE MONTH/YEAR (SYMBOL)                                KEY!BDATE_Y                
+R06813.00  1997  F  R HAVE PHYSICAL, EMOTIONAL CONDITION LIMITS SCHOOL/WORK?                   PC9-002                    
+R12014.00  1997  F  RS CURRENT ENROLLMENT STATUS                                               CV_ENROLLSTAT              
+R12047.00  1997  N  NET WORTH OF HOUSEHOLD ACCORDING TO PARENT                                 CV_HH_NET_WORTH_P          
+R14826.00  1997  F  KEY!RACE_ETHNICITY, COMBINED RACE AND ETHNICITY (SYMBOL)                   KEY!RACE_ETHNICITY         
+R21915.00  1998  F  R EVER USE COCAINE/HARD DRUGS?                                             YSAQ-372B                  
+S09200.00  2002  N  R IS DISORGANIZED OR ORGANIZED                                             YSAQ-282J                  
+S09207.00  2002  N  R IS TRUSTFUL OR DISTRUSTFUL                                               YSAQ-282Q                  
+S46772.00  2004  N  R'S WEIGHT - POUNDS                                                        YSAQ-000B                  
+S46858.00  2004  F  R DESCRIBE WEIGHT                                                          YSAQ-373                   
+T66567.00  2011  N  GROSS FAMILY INCOME                                                        CV_INCOME_FAMILY           
+T66569.00  2011  N  HOUSEHOLD SIZE                                                             CV_HH_SIZE                 
+T66570.00  2011  N  NUMBER OF HOUSEHOLD MEMBERS UNDER AGE 18                                   CV_HH_UNDER_18             
+T66571.00  2011  N  NUMBER OF HOUSEHOLD MEMBERS UNDER AGE 6                                    CV_HH_UNDER_6              
+T66573.00  2011  F  HIGHEST DEGREE RECEIVED PRIOR TO THE 11/12 ACAD YEAR                       CV_HIGHEST_DEGREE_1112     
+T66629.00  2011  F  RS COLLAPSED MARITAL STATUS                                                CV_MARSTAT_COLLAPSED       
+T75456.00  2011  N  TOTAL INCOME FROM WAGES AND SALARY IN PAST YEAR                            YINC-1700                  
+T76356.00  2011  N  R'S HEIGHT - FEET                                                          YSAQ-000A000001            
+T76357.00  2011  N  R'S HEIGHT - INCHES                                                        YSAQ-000A000002            
+T76358.00  2011  N  R'S WEIGHT - POUNDS                                                        YSAQ-000B                  
+T76388.00  2011  F  HAS R SMOKED SINCE DLI?                                                    YSAQ-360C                  
+T76392.00  2011  F  HAS R DRANK SINCE DLI?                                                     YSAQ-364D                  
+T76400.00  2011  F  HAS R USED COCAINE/HARD DRUGS SINCE DLI?                                   YSAQ-372CC                 
+T76403.00  2011  F  R DESCRIBE WEIGHT                                                          YSAQ-373                   
+T76404.00  2011  F  WHAT R DO ABOUT WEIGHT                                                     YSAQ-374                   
+T77311.00  2011  F  YEMP, TYPE OF BUS OR INDUSTRY CODE (2002 CENSUS 4-DIGIT) 01 (ROS ITEM)     YEMP_INDCODE-2002.01       
+Z90501.00  XRND  N  DEBT AT AGE 20                                                             CVC_ASSETS_DEBTS_20        
+Z90505.00  XRND  N  # EMPLOYEE-TYPE JOBS FROM AGE 14 THROUGH AGE 19                            CVC_TTL_JOB_TEEN           
+Z90507.00  XRND  N  # JOBS R HAS HELD FROM AGE 20                                              CVC_TTL_JOB_ADULT_ALL      
+Z91225.00  XRND  N  DEBT AT AGE 30                                                             CVC_ASSETS_DEBTS_30        
+
+
+summary(m <- vglm(RANGE.INCM.LAST.YR ~ TOTNUM.INC + GOOD.TEACHERS + SAFE.AT.SCHOOL + DPW.FAMILY.RELIGIOUS + GENDER + BDATE.M + BDATE.Y + PHY.EMO.LIMITS + ENROLL.STAT + HH.NET.WORTH.PRNT + RACE + DRUG.USE + ORGA.RATE + TRUST.RATE + WEIGHT_04 + WEIGHT.RATE_04 + FAMILY.INCOME + HH.SIZE + HH.MEMB.UND18 + HH.MEMB.UND6 + DEG.RCVD + MARITAL.STATUS + HEIGHT_FT + HEIGHT_INCH + WEIGHT_11 + SMOKED.DLI + DRANK.DLI + DRUGS.DLI + WEIGHT.RATE_11 + DO.ABT.WEIGHT + BUS.IND.TYPE + DEBT.20 + EMPL.JOBS.HELD.TEEN + JOBS.HELD.ADULT + DEBT.30, tobit(Upper = 146000), data = nlsy))
